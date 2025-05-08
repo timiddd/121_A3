@@ -40,10 +40,7 @@ class InvertedIndex:
         filtered_tokens = [token for token in tokens if token not in stop_words]
         return filtered_tokens
 
-    # def add_posting(self, token: str, doc_id: str, term_frequency: int):
-    #     """Add a posting to the inverted index."""
-    #     posting = Posting(doc_id, term_frequency)
-    #     self.index[token].append(posting)
+
     def add_document(self, content: str, url: str):
         doc_id = self.doc_id_counter
         self.doc_id_counter += 1
@@ -73,17 +70,7 @@ class InvertedIndex:
         print(f"Number of unique tokens: {num_tokens}")
         print(f"Size of index on disk: {size_kb:.2f} KB")
 
-    def get_postings(self, token: str) -> List[Posting]:
-        """Get all postings for a given token."""
-        return self.index.get(token, [])
 
-    def get_document_frequency(self, token: str) -> int:
-        """Get the number of documents containing a token."""
-        return len(self.index.get(token, []))
-
-    def get_document_length(self, doc_id: int) -> int:
-        """Get the length of a document."""
-        return self.doc_lengths.get(doc_id, 0)
 
 
 if __name__ == "__main__":
@@ -92,7 +79,6 @@ if __name__ == "__main__":
 
     root_dir = "/Users/jiananhong/Desktop/cs121/"
 
-    # Traverse all subdirectories and files
     for dirpath, dirnames, filenames in os.walk(root_dir):
         for filename in filenames:
             if filename.endswith(".json"):
