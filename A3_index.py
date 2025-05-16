@@ -20,6 +20,41 @@ class InvertedIndex:
         self.doc_id_map = {} # map doc_id(int) to url(str)
         self.doc_id_counter = 0
     
+    def stem(self, word: str) -> str:
+        # Step 1a
+        if word.endswith("sses"):
+            word = word[:-2]
+        elif word.endswith("ies") or word.endswith("ied"):
+            if len(word) > 4:
+                word = word[:-3] + "i"
+            else:
+                word = word[:-3] + "ie"
+        elif word.endswith("s") and not word.endswith("us") and not word.endswith("ss"):
+            if re.search(r"[aeiou].+s$", word): # vowel before s
+                word = word[:-1]
+
+        # Step 1b
+        if word.endswith("eed") or word.endswith("eedly"):
+            stem_part = word[:-3] if word.endswith("eed") else word[:-5]
+            if re.search(r"[aeiou][^aeiou]", stem_part):
+                word = word[:-1] if word.endswith("eed") else word[:-3]
+        elif any(word.endswith(suffix) for suffix in ["ed", "edly", "ing", "ingly"]):
+            suffixes = {"ed": 2, "edly": 4, "ing": 3, "ingly": 5}
+            for suffix, length in suffixes.items():
+                if word.endswith(suffix):
+                    stem = word[:-length]
+                    if re.search(r"[aeiou]", stem):
+                        word = stem
+                        if word.endswith(("at", "bl", "iz")):
+                            word += "e"
+                        elif re.search(r"([^aeiou])\1$", word) and not word.endswith(("ll", "ss", "zz")):
+                            word = word[:-1]
+                        elif len(word) <= 3:
+                            word += "e"
+                    break
+
+        return word
+
     def tokenize(self, text: str) -> List[str]:
         stop_words = {
     "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "aren't", "as", "at",
@@ -37,7 +72,9 @@ class InvertedIndex:
     "would", "wouldn't", "you", "you'd", "you'll", "you're", "you've", "your", "yours", "yourself", "yourselves"
 }
         tokens = re.findall(r'\b[a-zA-Z0-9]{2,}\b', text.lower())
-        filtered_tokens = [token for token in tokens if token not in stop_words]
+        filtered_tokens = [
+            self.stem(token) for token in tokens if token not in stop_words
+        ]
         return filtered_tokens
 
 
@@ -91,6 +128,6 @@ if __name__ == "__main__":
                         index.add_document(content, url)
                 except Exception as e:
                     print(f"Error reading {filepath}: {e}")
-    #index.print_index()
+    # index.print_index()
     index.show_index_stats("index.pkl")
 
