@@ -4,9 +4,12 @@ import re
 import json
 from collections import defaultdict
 import pickle
+from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
+import warnings
+warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
 
-class Posting:
+class Posting: # add importance(h1,h2,h3), design algorithm to determine which should be sorted first. h1 is the most important.
     def __init__(self, doc_id: int, term_freq: int): # doc_id is integer adding 1 when one more file is read, term_frequency is integer
         self.doc_id = doc_id
         self.term_freq = term_freq
@@ -82,7 +85,7 @@ class InvertedIndex:
         doc_id = self.doc_id_counter
         self.doc_id_counter += 1
         self.doc_id_map[doc_id] = url
-        tokens = self.tokenize(content) #list of tokens
+        tokens = self.tokenize(content) # list of tokens
         term_counts = defaultdict(int)
         for token in tokens:
             term_counts[token] += 1
@@ -110,10 +113,32 @@ class InvertedIndex:
 
 
 
+# if __name__ == "__main__":
+#     index = InvertedIndex()
+#     root_dir = "/Users/jiananhong/Desktop/cs121/xtune_ics_uci_edu"
+#
+#     # root_dir = "/Users/jiananhong/Desktop/cs121/"
+#
+#     for dirpath, dirnames, filenames in os.walk(root_dir):
+#         for filename in filenames:
+#             if filename.endswith(".json"):
+#                 filepath = os.path.join(dirpath, filename)
+#                 try:
+#                     with open(filepath, "r", encoding="utf-8") as f:
+#                         data = json.load(f)
+#                         raw_html = data.get("content", "") # need to filter out <>
+#                         soup = BeautifulSoup(raw_html, "html.parser")
+#                         visible_text = soup.get_text(separator=" ", strip=True)
+#
+#                         url = data.get("url", filepath)  # fallback to file path if no URL
+#                         index.add_document(visible_text, url)
+#                 except Exception as e:
+#                     print(f"Error reading {filepath}: {e}")
+#     index.print_index()
+#     # index.show_index_stats("index.pkl")
+
 if __name__ == "__main__":
     index = InvertedIndex()
-    # root_dir = "/Users/jiananhong/Desktop/cs121/xtune_ics_uci_edu" 
-
     root_dir = "/Users/jiananhong/Desktop/cs121/"
 
     for dirpath, dirnames, filenames in os.walk(root_dir):
@@ -123,11 +148,30 @@ if __name__ == "__main__":
                 try:
                     with open(filepath, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                        content = data.get("content", "")
-                        url = data.get("url", filepath)  # fallback to file path if no URL
-                        index.add_document(content, url)
-                except Exception as e:
-                    print(f"Error reading {filepath}: {e}")
-    # index.print_index()
-    index.show_index_stats("index.pkl")
+                        raw_content = data.get("content", "")
+                        url = data.get("url", filepath)
 
+                        # Handle both HTML and XML
+                        try:
+                            if raw_content.strip().startswith("<?xml") or "BEGIN:VCALENDAR" in raw_content:
+                                soup = BeautifulSoup(raw_content, "xml")
+                            else:
+                                soup = BeautifulSoup(raw_content, "html.parser")
+
+                            clean_text = soup.get_text(separator=" ", strip=True)
+
+                            # Skip short/invalid content
+                            if len(clean_text.strip()) < 20:
+                                print(f"Skipping {url} — content too short or invalid.")
+                                continue
+
+                            index.add_document(clean_text, url)
+
+                        except Exception as parse_err:
+                            print(f"Skipping {url} — parsing error: {parse_err}")
+                            continue
+
+                except Exception as file_err:
+                    print(f"Error reading {filepath}: {file_err}")
+
+    index.show_index_stats("index.pkl")
