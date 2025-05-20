@@ -45,10 +45,7 @@ def stem(word: str) -> str:
                 break
     return word
 def simple_search(query: str, index: InvertedIndex, top_k: int = 5) -> list[str]:
-    """
-    Return up to top_k URLs that contain ALL terms in query.
-    Assumes index.index[token] is already sorted by importance then frequency.
-    """
+
     token = query.lower().split()
     tokens = []
     for tok in token:
@@ -60,18 +57,17 @@ def simple_search(query: str, index: InvertedIndex, top_k: int = 5) -> list[str]
         return []
 
     postings_lists = [index.index.get(tok, []) for tok in tokens]
-    # if any term is unseen, no documents can match
+    # empty = no documents can match
     if any(len(pl) == 0 for pl in postings_lists):
         return []
-
-    # 3. Intersect the document‐ID sets
+    # AND
     common_docs = set(post.doc_id for post in postings_lists[0])
     for pl in postings_lists[1:]:
         common_docs &= {post.doc_id for post in pl}
     if not common_docs:
         return []
 
-    # 4. Rank by first term’s sorted postings
+    # Rank
     results = []
     for post in postings_lists[0]:
         if post.doc_id in common_docs:
@@ -82,7 +78,7 @@ def simple_search(query: str, index: InvertedIndex, top_k: int = 5) -> list[str]
     return results
 
 if __name__ == '__main__':
-    idx = load_index()              # make sure you ran index.sort_postings() before pickling
+    idx = load_index()
     while True:
         q = input("Search> ").strip()
         if not q:
