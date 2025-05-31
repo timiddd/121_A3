@@ -138,7 +138,7 @@ class InvertedIndex:
 
 if __name__ == "__main__":
     index = InvertedIndex()
-    root_dir = "/Users/jiananhong/Desktop/cs121/test/ANALYST"
+    root_dir = "/Users/jiananhong/Desktop/cs121"
 
     for dirpath, dirnames, filenames in os.walk(root_dir):
         for filename in filenames:

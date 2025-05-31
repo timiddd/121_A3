@@ -1,16 +1,39 @@
-# simple_search.py
-
 import pickle
-from test import InvertedIndex, Posting
+from A3_index import InvertedIndex, Posting
 import re
+
+"""
+M2 ver
 def load_index(index_path='index.pkl') -> InvertedIndex:
-    """Load pickled (index, doc_id_map) into an InvertedIndex instance."""
+    # Load pickled (index, doc_id_map) into an InvertedIndex instance.
     with open(index_path, 'rb') as f:
         idx_data, doc_map = pickle.load(f)
     idx = InvertedIndex()
     idx.index = idx_data
     idx.doc_id_map = doc_map
     return idx
+    """
+
+
+def load_lexicon(lexicon_path='lexicon.pkl'):
+    # Load index of index
+    with open(lexicon_path, 'rb') as f:
+        lexicon, doc_id_map = pickle.load(f)
+    return lexicon, doc_id_map
+
+def fetch_postings(term: str,
+                   lexicon: dict,
+                   postings_path='postings.dat') -> list:
+    if term not in lexicon:
+        return []
+    offset, length = lexicon[term]
+
+    with open(postings_path, 'rb') as pf:
+        pf.seek(offset)
+        blob = pf.read(length) # now holding the post we wanna search
+    return pickle.loads(blob)
+
+
 
 def stem(word: str) -> str:
     # (Porter stemmer steps as before)
@@ -44,46 +67,47 @@ def stem(word: str) -> str:
                         word += "e"
                 break
     return word
-def simple_search(query: str, index: InvertedIndex, top_k: int = 5) -> list[str]:
+def simple_search(query: str,
+                  lexicon: dict,
+                  doc_id_map: dict,
+                  postings_path: str = 'postings.dat',
+                  top_k: int = 5) -> list[str]:
 
-    token = query.lower().split()
-    tokens = []
-    for tok in token:
-        tok = stem(tok)
-        tokens.append(tok)
-
-
+    # tokenize and stem
+    tokens = [stem(tok) for tok in query.lower().split()]
     if not tokens:
         return []
 
-    postings_lists = [index.index.get(tok, []) for tok in tokens]
-    # empty = no documents can match
+    # get each term’s postings from postings.dat
+    postings_lists = [fetch_postings(tok, lexicon, postings_path)
+                      for tok in tokens] # seek implement here so we only get the word we want
+
     if any(len(pl) == 0 for pl in postings_lists):
         return []
+
     # AND
-    common_docs = set(post.doc_id for post in postings_lists[0])
+    common = set(p.doc_id for p in postings_lists[0])
     for pl in postings_lists[1:]:
-        common_docs &= {post.doc_id for post in pl}
-    if not common_docs:
+        common &= {p.doc_id for p in pl}
+    if not common:
         return []
 
-    # Rank
+    # rank
     results = []
-    for post in postings_lists[0]:
-        if post.doc_id in common_docs:
-            results.append(index.doc_id_map[post.doc_id])
+    for p in postings_lists[0]:
+        if p.doc_id in common:
+            results.append(doc_id_map[p.doc_id])
             if len(results) >= top_k:
                 break
-
     return results
 
 if __name__ == '__main__':
-    idx = load_index()
+    lexicon, doc_id_map = load_lexicon('lexicon.pkl')
     while True:
         q = input("Search> ").strip()
         if not q:
             continue
-        res = simple_search(q, idx)
+        res = simple_search(q, lexicon, doc_id_map, 'postings.dat')
         if res:
             print("Top results:")
             for url in res:
