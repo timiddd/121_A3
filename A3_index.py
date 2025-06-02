@@ -6,19 +6,21 @@ from collections import defaultdict
 import pickle
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 import warnings
+import math
 
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
 
 class Posting:
-    def __init__(self, doc_id: int, term_freq: int, importance: int = 4):
+    def __init__(self, doc_id: int, term_freq: int, importance: int = 4, tf_idf: float = 0.0):
 
         self.doc_id = doc_id
         self.term_freq = term_freq
         self.importance = importance # importance: 1 for h1, 2 for h2, 3 for h3, 4 for normal text or no heading
+        self.tf_idf = tf_idf
 
     def __repr__(self):
-        return f"Posting(doc_id={self.doc_id}, tf={self.term_freq}, imp={self.importance})"
+        return f"Posting(doc_id={self.doc_id}, tf={self.term_freq}, imp={self.importance}, tf_idf={self.tf_idf:.2f})"
 
 
 class InvertedIndex:
@@ -27,6 +29,7 @@ class InvertedIndex:
         self.doc_id_map: Dict[int, str] = {}
         self.doc_id_counter: int = 0
         self.default_importance: int = 4  # normal text
+        self.doc_freq: Dict[str, int] = defaultdict(int)  # Document frequency for each token, for tf-idf calculations
 
     def stem(self, word: str) -> str:
         # (Porter stemmer steps as before)
@@ -110,14 +113,26 @@ class InvertedIndex:
         for token in tokens:
             term_counts[token] += 1
 
+        # tracking document frequency for each token
+        unique_tokens = set(tokens)
+        for token in unique_tokens:
+            self.doc_freq[token] += 1
+
         for token, freq in term_counts.items():
             imp = importance_map.get(token, self.default_importance)
             self.index[token].append(Posting(doc_id, freq, imp))
 
-    def sort_postings(self):
-
+    def compute_tf_idf(self):
+        num_docs = len(self.doc_id_map)
         for token, postings in self.index.items():
-            postings.sort(key=lambda p: (p.importance, -p.term_freq))
+            idf = math.log(num_docs / (1 + self.doc_freq[token]))  # 1 so we dont divide by zero
+            for posting in postings:
+                tf = posting.term_freq
+                posting.tf_idf = tf * idf  # Add tf_idf attribute to Posting class
+
+    def sort_postings(self):
+        for token, postings in self.index.items():
+            postings.sort(key=lambda p: (-p.tf_idf, p.importance))
 
     def print_index(self):
         for token, postings in self.index.items():
@@ -138,7 +153,7 @@ class InvertedIndex:
 
 if __name__ == "__main__":
     index = InvertedIndex()
-    root_dir = "/Users/jiananhong/Desktop/cs121"
+    root_dir = "/Users/joehoshina/Information-Retrieval/Assignment3/search"
 
     for dirpath, dirnames, filenames in os.walk(root_dir):
         for filename in filenames:
@@ -177,7 +192,14 @@ if __name__ == "__main__":
                 except Exception as e:
                     print(f"Error processing {filepath}: {e}")
 
-    # sort postings before saving or printing
+    # Compute TF-IDF
+    index.compute_tf_idf()
+
+    # Sort postings before saving or printing
     index.sort_postings()
+
+    # Print the index to verify TF-IDF scores
+    index.print_index()
+
     # index.print_index()
     index.show_index_stats("index.pkl")
