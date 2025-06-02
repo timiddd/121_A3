@@ -133,17 +133,9 @@ class InvertedIndex:
             imp = importance_map.get(token, self.default_importance)
             self.index[token].append(Posting(doc_id, freq, imp))
 
-    def find_near_duplicates(self, content: str) -> List[int]:
-        fingerprint = self.get_fp(content)
-        near_duplicates = []
 
-        for doc_id, metadata in self.doc_id_map.items():
-            existing_fp = metadata["fingerprint"]
-            # Compare fingerprints (e.g., using set intersection)
-            if len(set(fingerprint) & set(existing_fp)) > 0:  # Adjust threshold as needed
-                near_duplicates.append(doc_id)
 
-        return near_duplicates
+
 
     def compute_tf_idf(self):
         num_docs = len(self.doc_id_map)
