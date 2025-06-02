@@ -2,6 +2,7 @@ import http.server
 import socketserver
 import urllib.parse
 import html
+import time
 from query import load_lexicon, simple_search
 
 lexicon, doc_id_map = load_lexicon('lexicon.pkl')
@@ -95,6 +96,13 @@ class SearchHandler(http.server.SimpleHTTPRequestHandler):
         elif parsed.path == '/search':
             params = urllib.parse.parse_qs(parsed.query)
             query = params.get('q', [''])[0].strip()
+
+            # Measure search time
+            start = time.time()
+            results = simple_search(query, lexicon, doc_id_map, postings_path, top_k=5)
+            elapsed = (time.time() - start) * 1000  # in milliseconds
+            print(f"[SEARCH] query='{query}' took {elapsed:.1f} ms")
+
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
@@ -187,6 +195,11 @@ class SearchHandler(http.server.SimpleHTTPRequestHandler):
       font-style: italic;
       color: #666;
     }
+    .timing {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      color: #555;
+    }
   </style>
 </head>
 <body>
@@ -199,14 +212,12 @@ class SearchHandler(http.server.SimpleHTTPRequestHandler):
     <div class="results">
 """
 
+            safe_query = html.escape(query)
             if not query:
                 response_body = "<p class='no-results'>No query provided.</p></div></main></body></html>"
                 full_response = header_html.replace("{escaped_query}", "") + response_body
                 self.wfile.write(full_response.encode('utf-8'))
                 return
-
-            results = simple_search(query, lexicon, doc_id_map, postings_path, top_k=5)
-            safe_query = html.escape(query)
 
             if not results:
                 body = f"<h2>Results for: “{safe_query}”</h2><p class='no-results'>No documents found.</p>"
@@ -217,10 +228,13 @@ class SearchHandler(http.server.SimpleHTTPRequestHandler):
                     body += f'<li><a href="{safe_url}" target="_blank">{safe_url}</a></li>'
                 body += "</ol>"
 
-            footer_html = "</div></main></body></html>"
+            # Show timing below results
+            timing_html = f'<p class="timing">Search time: {elapsed:.1f} ms</p>'
+            footer_html = "</div>" + timing_html + "</main></body></html>"
 
             full_response = header_html.replace("{escaped_query}", safe_query) + body + footer_html
             self.wfile.write(full_response.encode('utf-8'))
+
         else:
             self.send_error(404)
 
