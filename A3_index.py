@@ -65,62 +65,85 @@ class InvertedIndex:
         return word
 
     def tokenize(self, text: str) -> List[str]:
-        # stop_words = {
-        #     "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "aren't", "as",
-        #     "at",
-        #     "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", "can", "can't",
-        #     "cannot", "could",
-        #     "couldn't", "did", "didn't", "do", "does", "doesn't", "doing", "don't", "down", "during", "each", "few",
-        #     "for",
-        #     "from", "further", "get", "had", "hadn't", "has", "hasn't", "have", "haven't", "having", "he", "he'd",
-        #     "he'll", "he's",
-        #     "her", "here", "here's", "hers", "herself", "him", "himself", "his", "how", "how's", "i", "i'd", "i'll",
-        #     "i'm",
-        #     "i've", "if", "in", "into", "is", "isn't", "it", "it's", "its", "itself", "let's", "may", "me", "more",
-        #     "most", "mustn't",
-        #     "my", "myself", "next", "no", "nor", "not", "of", "off", "on", "once", "only", "or", "other", "ought",
-        #     "our", "ours",
-        #     "ourselves", "out", "over", "own", "same", "shan't", "she", "she'd", "she'll", "she's", "should",
-        #     "shouldn't", "so",
-        #     "some", "such", "than", "that", "that's", "the", "their", "theirs", "them", "themselves", "then", "there",
-        #     "there's",
-        #     "these", "they", "they'd", "they'll", "they're", "they've", "this", "those", "through", "to", "too",
-        #     "under",
-        #     "until", "up", "very", "was", "wasn't", "we", "we'd", "we'll", "we're", "we've", "were", "weren't", "what",
-        #     "what's",
-        #     "when", "when's", "where", "where's", "which", "while", "who", "who's", "whom", "why", "why's", "with",
-        #     "won't",
-        #     "would", "wouldn't", "you", "you'd", "you'll", "you're", "you've", "your", "yours", "yourself", "yourselves"
-        # }
         tokens = re.findall(r'\b[a-zA-Z0-9]{2,}\b', text.lower())
         filtered_tokens = [self.stem(token) for token in tokens]
         return filtered_tokens
+    # plus 1 point for the three gram
+    def three_gram(self, text: str) -> List[str]:
+        words = self.tokenize(text)
+        three_grams = []
+
+        for i in range(len(words) - 2):
+            three_grams.append(''.join(words[i:i + 3]))
+
+        return three_grams
+
+    def hash_value(self, three_gram: str) -> int:
+        import hashlib
+        return int(hashlib.md5(three_gram.encode('utf-8')).hexdigest(), 16)
+
+    def select_hash(self, hashes: List[int], k: int = 50) -> List[int]:
+        return sorted(hashes)[:k]
+
+    # plus 2 for fingerprint since this finds near dupes
+    def get_fp(self, text: str) -> List[int]:
+        three_grams = self.three_gram(text)
+        hashes = [self.hash_value(g) for g in three_grams]
+        fingerprint = self.select_hash(hashes)
+        return fingerprint
 
     def add_document(self, content: str, url: str, importance_map: Optional[Dict[str, int]] = None):
         """
         content: cleaned text of document
         importance_map: token->importance level (1-4)
         """
+        # Compute fingerprint for the document
+        fingerprint = self.get_fp(content)
+
+        # Check for near-duplicates
+        for doc_id, metadata in self.doc_id_map.items():
+            existing_fp = metadata.get("fingerprint")
+            if existing_fp and len(set(fingerprint) & set(existing_fp)) > 0:  # Adjust threshold as needed
+                print(f"Skipping {url} — near-duplicate of document ID {doc_id}.")
+                return  # Skip indexing this document
+
+        # Assign a new document ID
         doc_id = self.doc_id_counter
         self.doc_id_counter += 1
-        self.doc_id_map[doc_id] = url
+
+        # Store document metadata (URL and fingerprint)
+        self.doc_id_map[doc_id] = {"url": url, "fingerprint": fingerprint}
 
         if importance_map is None:
             importance_map = {}
 
+        # Tokenize content and count term frequencies
         tokens = self.tokenize(content)
         term_counts = defaultdict(int)
         for token in tokens:
             term_counts[token] += 1
 
-        # tracking document frequency for each token
+        # Track document frequency for each token
         unique_tokens = set(tokens)
         for token in unique_tokens:
             self.doc_freq[token] += 1
 
+        # Add tokens to the index
         for token, freq in term_counts.items():
             imp = importance_map.get(token, self.default_importance)
             self.index[token].append(Posting(doc_id, freq, imp))
+
+    def find_near_duplicates(self, content: str) -> List[int]:
+        fingerprint = self.get_fp(content)
+        near_duplicates = []
+
+        for doc_id, metadata in self.doc_id_map.items():
+            existing_fp = metadata["fingerprint"]
+            # Compare fingerprints (e.g., using set intersection)
+            if len(set(fingerprint) & set(existing_fp)) > 0:  # Adjust threshold as needed
+                near_duplicates.append(doc_id)
+
+        return near_duplicates
 
     def compute_tf_idf(self):
         num_docs = len(self.doc_id_map)
